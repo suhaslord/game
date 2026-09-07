@@ -1,0 +1,20 @@
+{
+  "solver_repo": "aidanlay12/UQDG-mxfoil",
+  "solver_commit": "f351b60e11a7feb1ac5a176462577d7dc39842ae",
+  "samples_requested": 256,
+  "samples_converged": 256,
+  "samples_failed": 0,
+  "failed_indices": [],
+  "panel_size": 256,
+  "iterations": 800,
+  "conv_tol": 0.0001,
+  "seed": 20260907,
+  "Cl_mean": 0.20928313511607244,
+  "Cl_std": 0.013823368204455273,
+  "Cl_median": 0.2092556020628945,
+  "Cm_mean": -0.04723850717120723,
+  "Cm_std": 0.0009279168705350669,
+  "Cm_median": -0.0472651823473052,
+  "P_outside_CL_box": 0.0,
+  "P_outside_Cm_box": 0.01171875
+}
