@@ -1,0 +1,92 @@
+name: AIAA UQDG Case 1
+on:
+  push:
+    branches: [aiaa-uqdg-case1-run]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  case1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone pinned UQDG implementation
+        run: |
+          git clone https://github.com/aidanlay12/UQDG-mxfoil.git /tmp/UQDG-mxfoil
+          cd /tmp/UQDG-mxfoil
+          git checkout f351b60e11a7feb1ac5a176462577d7dc39842ae
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e /tmp/UQDG-mxfoil/UQDG_Python
+          chmod +x /tmp/UQDG-mxfoil/UQDG_Python/src/solvers/xfoil
+      - name: Run Case 1 normal-input Monte Carlo
+        run: |
+          cat > /tmp/UQDG-mxfoil/UQDG_Python/run_case1.py <<'PY'
+          import json, os
+          import numpy as np
+          import pandas as pd
+          from UQDGmxfoil.sample import sample
+          from UQDGmxfoil.solver_eval import solver_eval
+
+          np.random.seed(20260907)
+          os.chdir('/tmp/UQDG-mxfoil/UQDG_Python')
+          n = 256
+          names = ['alpha','Re','flap_deflection','xtr_upper','xtr_lower']
+          means = [0.0, 500000.0, 0.0, 0.3, 0.7]
+          stds = [0.1, 2500.0, 0.08, 0.015, 0.021]
+          sample(num_samples=n, solver='xfoil').create_samples('case1_normal_256.csv','normal','monte',means,stds,input_names=names)
+          solver = solver_eval('case1_normal_256.csv', panel_size=256, num_of_iter=800, conv_tol=1e-4, airfoil_name='NACA 2412')
+          rows=[]
+          failed=[]
+          for i in range(n):
+              solver.single_solve(i)
+              cl, cm = map(float, solver.results)
+              if cl == 0.0 and cm == 0.0:
+                  failed.append(i)
+              else:
+                  rows.append((i, cl, cm))
+              if (i+1) % 32 == 0:
+                  print(f'progress {i+1}/{n}', flush=True)
+          df=pd.DataFrame(rows,columns=['index','Cl','Cm'])
+          df.to_csv('output/case1_fresh_results.csv',index=False)
+          summary={
+            'solver_repo':'aidanlay12/UQDG-mxfoil',
+            'solver_commit':'f351b60e11a7feb1ac5a176462577d7dc39842ae',
+            'samples_requested':n,
+            'samples_converged':int(len(df)),
+            'samples_failed':int(len(failed)),
+            'failed_indices':failed,
+            'panel_size':256,
+            'iterations':800,
+            'conv_tol':1e-4,
+            'seed':20260907,
+            'Cl_mean':float(df.Cl.mean()),
+            'Cl_std':float(df.Cl.std(ddof=1)),
+            'Cl_median':float(df.Cl.median()),
+            'Cm_mean':float(df.Cm.mean()),
+            'Cm_std':float(df.Cm.std(ddof=1)),
+            'Cm_median':float(df.Cm.median()),
+            'P_outside_CL_box':float(((df.Cl < 0.155) | (df.Cl > 0.265)).mean()),
+            'P_outside_Cm_box':float(((df.Cm < -0.050) | (df.Cm > -0.044)).mean())
+          }
+          with open('output/case1_fresh_summary.json','w') as f: json.dump(summary,f,indent=2)
+          print(json.dumps(summary,indent=2))
+          PY
+          cd /tmp/UQDG-mxfoil/UQDG_Python
+          python run_case1.py
+      - name: Publish fresh results to branch
+        run: |
+          mkdir -p aiaa-uqdg-results
+          cp /tmp/UQDG-mxfoil/UQDG_Python/output/case1_fresh_summary.json aiaa-uqdg-results/
+          cp /tmp/UQDG-mxfoil/UQDG_Python/output/case1_fresh_results.csv aiaa-uqdg-results/
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add aiaa-uqdg-results
+          git commit -m 'results: fresh AIAA UQDG Case 1 run' || exit 0
+          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aiaa-uqdg-case1-results
+          path: /tmp/UQDG-mxfoil/UQDG_Python/output/case1_fresh_*
